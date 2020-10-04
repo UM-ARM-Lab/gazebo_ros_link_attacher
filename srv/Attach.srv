@@ -2,5 +2,7 @@ string model_name_1
 string link_name_1
 string model_name_2
 string link_name_2
+bool has_anchor_position
+geometry_msgs/Point anchor_position
 ---
 bool ok

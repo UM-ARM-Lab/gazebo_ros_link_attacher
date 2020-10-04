@@ -4,24 +4,24 @@
  * Date: 05/04/2016
  */
 
-#ifndef GAZEBO_ROS_LINK_ATTACHER_HH
-#define GAZEBO_ROS_LINK_ATTACHER_HH
+#pragma once
 
+#include <optional>
 #include <ros/ros.h>
 
 #include <sdf/sdf.hh>
-#include "gazebo/gazebo.hh"
+#include <gazebo/gazebo.hh>
 #include <gazebo/physics/physics.hh>
-#include "gazebo/physics/PhysicsTypes.hh"
+#include <gazebo/physics/PhysicsTypes.hh>
 #include <gazebo/transport/TransportTypes.hh>
 #include <gazebo/common/Time.hh>
 #include <gazebo/common/Plugin.hh>
 #include <gazebo/common/Events.hh>
-#include "gazebo/msgs/msgs.hh"
-#include "gazebo/transport/transport.hh"
-#include "gazebo_ros_link_attacher/Attach.h"
-#include "gazebo_ros_link_attacher/AttachRequest.h"
-#include "gazebo_ros_link_attacher/AttachResponse.h"
+#include <gazebo/msgs/msgs.hh>
+#include <gazebo/transport/transport.hh>
+#include <gazebo_ros_link_attacher/Attach.h>
+#include <gazebo_ros_link_attacher/AttachRequest.h>
+#include <gazebo_ros_link_attacher/AttachResponse.h>
 
 namespace gazebo
 {
@@ -32,22 +32,20 @@ class GazeboRosLinkAttacher : public WorldPlugin
   /// \brief Constructor
   GazeboRosLinkAttacher();
 
-  /// \brief Destructor
-  virtual ~GazeboRosLinkAttacher();
-
   /// \brief Load the controller
-  void Load(physics::WorldPtr _world, sdf::ElementPtr /*_sdf*/);
+  void Load(physics::WorldPtr _world, sdf::ElementPtr /*_sdf*/) override;
 
   /// \brief Attach with a revolute joint
-  bool attach(std::string model1, std::string link1,
-              std::string model2, std::string link2);
+  bool attach(const std::string &model1, const std::string &link1,
+              const std::string &model2, const std::string &link2,
+              std::optional<ignition::math::Vector3d> anchor_position);
 
   /// \brief Detach
-  bool detach(std::string model1, std::string link1,
-              std::string model2, std::string link2);
+  bool detach(const std::string &model1, const std::string &link1,
+              const std::string &model2, const std::string &link2);
 
   /// \brief Internal representation of a fixed joint
-  struct fixedJoint
+  struct FixedJoint
   {
     std::string model1;
     physics::ModelPtr m1;
@@ -60,7 +58,9 @@ class GazeboRosLinkAttacher : public WorldPlugin
     physics::JointPtr joint;
   };
 
-  bool getJoint(std::string model1, std::string link1, std::string model2, std::string link2, fixedJoint &joint);
+  bool
+  getJoint(const std::string &model1, const std::string &link1, const std::string &model2, const std::string &link2,
+           FixedJoint &joint);
 
  private:
   ros::NodeHandle nh_;
@@ -73,7 +73,7 @@ class GazeboRosLinkAttacher : public WorldPlugin
   bool detach_callback(gazebo_ros_link_attacher::Attach::Request &req,
                        gazebo_ros_link_attacher::Attach::Response &res);
 
-  std::vector<fixedJoint> joints;
+  std::vector<FixedJoint> joints;
 
   /// \brief The physics engine.
   physics::PhysicsEnginePtr physics;
@@ -84,6 +84,3 @@ class GazeboRosLinkAttacher : public WorldPlugin
 };
 
 }
-
-#endif
-

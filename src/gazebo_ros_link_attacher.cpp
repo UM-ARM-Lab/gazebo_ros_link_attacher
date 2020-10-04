@@ -1,9 +1,7 @@
 #include <gazebo/common/Plugin.hh>
 #include <ros/ros.h>
-#include "gazebo_ros_link_attacher.h"
-#include "gazebo_ros_link_attacher/Attach.h"
-#include "gazebo_ros_link_attacher/AttachRequest.h"
-#include "gazebo_ros_link_attacher/AttachResponse.h"
+#include <gazebo_ros_link_attacher.h>
+#include <gazebo_ros_link_attacher/Attach.h>
 #include <ignition/math/Pose3.hh>
 
 namespace gazebo
@@ -14,12 +12,6 @@ GZ_REGISTER_WORLD_PLUGIN(GazeboRosLinkAttacher)
 // Constructor
 GazeboRosLinkAttacher::GazeboRosLinkAttacher() :
     nh_("link_attacher_node")
-{
-}
-
-
-// Destructor
-GazeboRosLinkAttacher::~GazeboRosLinkAttacher()
 {
 }
 
@@ -42,15 +34,15 @@ void GazeboRosLinkAttacher::Load(physics::WorldPtr _world, sdf::ElementPtr /*_sd
   ROS_INFO("Link attacher node initialized.");
 }
 
-bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1,
-                                   std::string model2, std::string link2)
+bool GazeboRosLinkAttacher::attach(const std::string &model1, const std::string &link1,
+                                   const std::string &model2, const std::string &link2,
+                                   std::optional<ignition::math::Vector3d> anchor_position)
 {
-
   // look for any previous instance of the joint first.
   // if we try to create a joint in between two links
   // more than once (even deleting any reference to the first one)
   // gazebo hangs/crashes
-  fixedJoint j;
+  FixedJoint j;
   if (this->getJoint(model1, link1, model2, link2, j))
   {
     ROS_INFO_STREAM("Joint already existed, reusing it.");
@@ -67,14 +59,14 @@ bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1,
   ROS_DEBUG_STREAM("Getting BasePtr of " << model1);
   physics::BasePtr b1 = this->world->ModelByName(model1);
 
-  if (b1 == NULL)
+  if (!b1)
   {
     ROS_ERROR_STREAM(model1 << " model was not found");
     return false;
   }
   ROS_DEBUG_STREAM("Getting BasePtr of " << model2);
   physics::BasePtr b2 = this->world->ModelByName(model2);
-  if (b2 == NULL)
+  if (!b2)
   {
     ROS_ERROR_STREAM(model2 << " model was not found");
     return false;
@@ -88,12 +80,12 @@ bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1,
 
   ROS_DEBUG_STREAM("Getting link: '" << link1 << "' from model: '" << model1 << "'");
   physics::LinkPtr l1 = m1->GetLink(link1);
-  if (l1 == NULL)
+  if (!l1)
   {
     ROS_ERROR_STREAM(link1 << " link was not found");
     return false;
   }
-  if (l1->GetInertial() == NULL)
+  if (!l1->GetInertial())
   {
     ROS_ERROR_STREAM("link1 inertia is NULL!");
   } else
@@ -101,12 +93,12 @@ bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1,
   j.l1 = l1;
   ROS_DEBUG_STREAM("Getting link: '" << link2 << "' from model: '" << model2 << "'");
   physics::LinkPtr l2 = m2->GetLink(link2);
-  if (l2 == NULL)
+  if (!l2)
   {
     ROS_ERROR_STREAM(link2 << " link was not found");
     return false;
   }
-  if (l2->GetInertial() == NULL)
+  if (!l2->GetInertial())
   {
     ROS_ERROR_STREAM("link2 inertia is NULL!");
   } else
@@ -115,12 +107,20 @@ bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1,
 
   ROS_DEBUG_STREAM("Links are: " << l1->GetName() << " and " << l2->GetName());
 
-  ROS_DEBUG_STREAM("Creating revolute joint on model: '" << model1 << "'");
-  j.joint = this->physics->CreateJoint("revolute", m1);
+  ROS_DEBUG_STREAM("Creating joint on model: '" << model1 << "'");
+  j.joint = this->physics->CreateJoint("fixed", m1);
+  std::stringstream ss;
+  ss << j.model1 << "_" << j.link1 << "_to_" << j.model2 << "_" << j.link2 << "_joint";
+  auto const joint_name = ss.str();
+  j.joint->SetName(joint_name);
   this->joints.push_back(j);
 
-  ROS_DEBUG_STREAM("Attach");
+  ROS_DEBUG_STREAM("Attach joint with name " << joint_name);
   j.joint->Attach(l1, l2);
+  if (anchor_position)
+  {
+    j.joint->SetAnchor(0, anchor_position.value());
+  }
   ROS_DEBUG_STREAM("Loading links");
   j.joint->Load(l1, l2, ignition::math::Pose3d());
   ROS_DEBUG_STREAM("SetModel");
@@ -139,10 +139,6 @@ bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1,
    /tmp/buildd/gazebo2-2.2.3/gazebo/physics/ode/ODELink.cc(183): Inertial pointer is NULL
    */
 
-  ROS_DEBUG_STREAM("SetHightstop");
-  j.joint->SetUpperLimit(0, 0);
-  ROS_DEBUG_STREAM("SetLowStop");
-  j.joint->SetLowerLimit(0, 0);
   ROS_DEBUG_STREAM("Init");
   j.joint->Init();
   ROS_INFO_STREAM("Attach finished.");
@@ -150,11 +146,11 @@ bool GazeboRosLinkAttacher::attach(std::string model1, std::string link1,
   return true;
 }
 
-bool GazeboRosLinkAttacher::detach(std::string model1, std::string link1,
-                                   std::string model2, std::string link2)
+bool GazeboRosLinkAttacher::detach(const std::string &model1, const std::string &link1,
+                                   const std::string &model2, const std::string &link2)
 {
   // search for the instance of joint and do detach
-  fixedJoint j;
+  FixedJoint j;
   if (this->getJoint(model1, link1, model2, link2, j))
   {
     j.joint->Detach();
@@ -164,16 +160,13 @@ bool GazeboRosLinkAttacher::detach(std::string model1, std::string link1,
   return false;
 }
 
-bool GazeboRosLinkAttacher::getJoint(std::string model1, std::string link1,
-                                     std::string model2, std::string link2,
-                                     fixedJoint &joint)
+bool GazeboRosLinkAttacher::getJoint(const std::string &model1, const std::string &link1,
+                                     const std::string &model2, const std::string &link2,
+                                     FixedJoint &joint)
 {
-  fixedJoint j;
-  for (std::vector<fixedJoint>::iterator it = this->joints.begin(); it != this->joints.end(); ++it)
+  for (const auto &j : this->joints)
   {
-    j = *it;
-    if ((j.model1.compare(model1) == 0) && (j.model2.compare(model2) == 0)
-        && (j.link1.compare(link1) == 0) && (j.link2.compare(link2) == 0))
+    if ((j.model1 == model1) && (j.model2 == model2) && (j.link1 == link1) && (j.link2 == link2))
     {
       joint = j;
       return true;
@@ -190,14 +183,22 @@ bool GazeboRosLinkAttacher::attach_callback(gazebo_ros_link_attacher::Attach::Re
                                                         << "' using link: '" << req.link_name_1 << "' with model: '"
                                                         << req.model_name_2 << "' using link: '" << req.link_name_2
                                                         << "'");
+  std::optional<ignition::math::Vector3d> anchor_position;
+  if (req.has_anchor_position)
+  {
+    ROS_INFO_STREAM("with anchor position");
+    ROS_INFO_STREAM(req.anchor_position);
+    anchor_position.emplace(req.anchor_position.x, req.anchor_position.y, req.anchor_position.z);
+  }
   if (!this->attach(req.model_name_1, req.link_name_1,
-                    req.model_name_2, req.link_name_2))
+                    req.model_name_2, req.link_name_2,
+                    anchor_position))
   {
     ROS_ERROR_STREAM("Could not make the attach.");
     res.ok = false;
   } else
   {
-    ROS_INFO_STREAM("Attach was succesful");
+    ROS_INFO_STREAM("Attach was successful");
     res.ok = true;
   }
   return true;
@@ -218,7 +219,7 @@ bool GazeboRosLinkAttacher::detach_callback(gazebo_ros_link_attacher::Attach::Re
     res.ok = false;
   } else
   {
-    ROS_INFO_STREAM("Detach was succesful");
+    ROS_INFO_STREAM("Detach was successful");
     res.ok = true;
   }
   return true;
